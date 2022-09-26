@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
+	"github.com/ethereum/go-ethereum"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gorilla/websocket"
 )
 
@@ -14,11 +18,15 @@ import (
 // 	Params  jsonrpc.Params `json:"params"`
 // }
 
+// type Paparams struct {
+// 	Subscription string `json:"subscription"`
+// 	Result *ethtypes.Log `json:"result"`
+// }
+
 // type Response struct {
 // 	JSONRPC string `json:"jsonrpc"`
 // 	Method  string `json:"method"`
-// 	ID      jsonrpc.ID     `json:"id"`
-// 	Params  jsonrpc.Params `json:"params"`
+// 	Params Paparams `json:"params"`
 // }
 
 var url = "wss://eth-mainnet.ws.alchemyapi.io/ws/demo"
@@ -49,8 +57,7 @@ func reader(conn *websocket.Conn) {
 func main() {
 
 	// web socket
-	c, _, err := websocket.DefaultDialer.Dial(url, nil)
-
+	c, err := ethclient.Dial(url)
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
@@ -61,19 +68,30 @@ func main() {
 	defer c.Close()
 
 	// request
-	rawReq := `{"jsonrpc":"2.0","id": 1, "method": "eth_subscribe", "params": ["logs"]}`
+	// rawReq := `{"jsonrpc":"2.0","id": 1, "method": "eth_subscribe", "params": ["logs"]}`
 
-	bReq := []byte(rawReq)
+	// bReq := []byte(rawReq)
 
 	// send request
 
-	err = c.WriteMessage(1, bReq)
+	logChan := make(chan ethtypes.Log)
 
+	sub, err := c.SubscribeFilterLogs(context.Background(), ethereum.FilterQuery{}, logChan)
 	if err != nil {
-		fmt.Println("Error write:", err)
+		fmt.Println("Error subscription:", err)
 		return
 	}
 
-	reader(c)
+	for {
+		select {
+			case err := <-sub.Err():
+				log.Fatal(err)
+				return 
+			case vLog := <-logChan:
+				fmt.Println(vLog) // pointer to event log
+		}
+	}
+
+	// reader(c)
 
 }
